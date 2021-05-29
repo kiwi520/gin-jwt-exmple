@@ -35,6 +35,24 @@ func init() {
 	}
 }
 
+func Cors() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		method := c.Request.Method
+		origin := c.Request.Header.Get("Origin")
+		if origin != "" {
+			c.Header("Access-Control-Allow-Origin", "*") // 可将将 * 替换为指定的域名
+			c.Header("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, UPDATE")
+			c.Header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization")
+			c.Header("Access-Control-Expose-Headers", "Content-Length, Access-Control-Allow-Origin, Access-Control-Allow-Headers, Cache-Control, Content-Language, Content-Type")
+			c.Header("Access-Control-Allow-Credentials", "true")
+		}
+		if method == "OPTIONS" {
+			c.AbortWithStatus(http.StatusNoContent)
+		}
+		c.Next()
+	}
+}
+
 func TokenAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		err := TokenValid(c.Request)
@@ -67,13 +85,17 @@ type AccessDetails struct {
 }
 
 func main() {
-	router.POST("/login", Login)
-	router.POST("/token/refresh", Refresh)
+	//api
+	//router.Use(Cors()) //开启中间件 允许使用跨域请求
 
-	router.POST("/todo", TokenAuthMiddleware(), CreateTodo)
-	router.POST("/logout", TokenAuthMiddleware(), Logout)
+	api := router.Group("api", Cors())
+	{
+		api.POST("/login", Login)
+		api.POST("/token/refresh", Refresh)
 
-
+		api.POST("/todo", TokenAuthMiddleware(), CreateTodo)
+		api.POST("/logout", TokenAuthMiddleware(), Logout)
+	}
 
 	log.Fatal(router.Run(":8080"))
 }
@@ -83,6 +105,11 @@ type User struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 	Phone    string `json:"phone"`
+}
+
+type TokenData struct {
+	AccessToken      string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
 }
 
 var user = User{
@@ -111,10 +138,13 @@ func Login(c *gin.Context) {
 	if saveErr != nil {
 		c.JSON(http.StatusUnprocessableEntity, saveErr.Error())
 	}
-	tokens := map[string]string{
-		"access_token":  ts.AccessToken,
-		"refresh_token": ts.RefreshToken,
-	}
+	var tokens TokenData
+	tokens.AccessToken = ts.AccessToken
+	tokens.RefreshToken = ts.RefreshToken
+	//tokens := map[string]string{
+	//	"access_token":  ts.AccessToken,
+	//	"refresh_token": ts.RefreshToken,
+	//}
 	c.JSON(http.StatusOK, tokens)
 }
 
@@ -308,7 +338,6 @@ func Logout(c *gin.Context) {
 	c.JSON(http.StatusOK, "退出成功")
 }
 
-
 /**
 刷新令牌
 */
@@ -372,15 +401,16 @@ func Refresh(c *gin.Context) {
 			c.JSON(http.StatusForbidden, saveErr.Error())
 			return
 		}
-		tokens := map[string]string{
-			"access_token":  ts.AccessToken,
-			"refresh_token": ts.RefreshToken,
-		}
+		//tokens := map[string]string{
+		//	"access_token":  ts.AccessToken,
+		//	"refresh_token": ts.RefreshToken,
+		//}
+		var tokens TokenData
+		tokens.AccessToken = ts.AccessToken
+		tokens.RefreshToken = ts.RefreshToken
 		c.JSON(http.StatusCreated, tokens)
 	} else {
 		//c.JSON(http.StatusUnauthorized, "refresh expired")
 		c.JSON(http.StatusUnauthorized, "刷新token令牌已失效，请重新登陆")
 	}
 }
-
-
